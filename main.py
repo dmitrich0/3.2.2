@@ -1,8 +1,7 @@
 import csv
-
+from concurrent.futures import ThreadPoolExecutor
 from line_profiler import LineProfiler
 from Helper import Helper
-from multiprocessing import Pool
 
 profiler = LineProfiler()
 
@@ -33,6 +32,7 @@ class Vacancy:
         "UZS": 0.0055,
     }
 
+    @profile
     def __init__(self, vacancy: dict[str, str]) -> None:
         """
         Инициализирует объект Vacancy, выполняет конвертацию для некоторых полей, считает среднюю зарплату
@@ -58,6 +58,7 @@ class DataSet:
         vacancy_name (str): Название вакансии
     """
 
+    @profile
     def __init__(self, file: str, vacancy: str) -> None:
         """
         Инициализирует объект Dataset
@@ -76,6 +77,7 @@ class DataSet:
         self.vacancy_name = vacancy
 
     @staticmethod
+    @profile
     def increment(subject: dict, key, value) -> None:
         """
         Если в subject есть значение с ключом key: увеличивает его на value, иначе: присваивает ему значение value
@@ -91,6 +93,7 @@ class DataSet:
             subject[key] = value
 
     @staticmethod
+    @profile
     def get_average_dict(data: dict) -> dict:
         """
         Создаёт новый словарь из данного, где элементы - среднее значение
@@ -106,6 +109,7 @@ class DataSet:
             result[key] = int(sum(data) / len(data))
         return result
 
+    @profile
     def csv_reader(self) -> dict:
         """
         Открывает файл и лениво возвращает словари с данными вакансии
@@ -118,6 +122,7 @@ class DataSet:
                 if '' not in row and len(row) == titles_count:
                     yield dict(zip(titles, row))
 
+    @profile
     def get_statistics(self) -> (dict, dict, dict, dict):
         """
         Формирует статистику по вакансиям и возвращает кортеж с данными
@@ -158,6 +163,7 @@ class DataSet:
         return stat_salary, vacancies_number, stat_salary_by_vac, vacs_per_name
 
     @staticmethod
+    @profile
     def print_statistic(salary_by_year: dict, vacs_per_year: dict, salary_by_vac: dict, count_by_vac: dict) -> None:
         """
         Печатает статистику
@@ -187,6 +193,7 @@ class InputConnect:
         self.files_folder = input("Введите название папки с чанками: ")
         self.vacancy_name = input('Введите название профессии: ')
 
+    @profile
     def process_input(self) -> None:
         """
         Обрабатывает входные данные, создает процессы и печатает результат
@@ -196,8 +203,8 @@ class InputConnect:
         pools = []
         for file in files:
             dataset = DataSet(file, self.vacancy_name)
-            p = Pool(5)
-            result = p.apply_async(dataset.get_statistics)
+            with ThreadPoolExecutor(5) as executor:
+                result = executor.submit(dataset.get_statistics)
             pools.append(result)
         multi = Multiprocessing(pools)
         result = multi.get_united_dict()
@@ -211,20 +218,27 @@ class Multiprocessing:
     Attributes:
         pools (str): Созданные пуллы
     """
+
+    @profile
     def __init__(self, pools) -> None:
         self.pools = pools
 
+    @profile
     def get_united_dict(self) -> set:
         """
         Возвращает результаты выполнения всех процессов
         :return: Множество результатов
         """
-        answer = self.pools[0].get()
+        answer = self.pools[0].result()
         for i in range(1, len(self.pools)):
             for k in range(0, 4):
-                answer[k].update(self.pools[i].get()[k])
-        return self.pools[0].get()
+                answer[k].update(self.pools[i].result()[k])
+        return self.pools[0].result()
+
+
+def main():
+    InputConnect().process_input()
 
 
 if __name__ == '__main__':
-    InputConnect().process_input()
+    main()
